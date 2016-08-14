@@ -10,6 +10,7 @@ class MongoDB(SimpleBase):
         self.data = {
             'users': {},
             'databases': {},
+            'port': 27017,
         }
 
         self.services = ['mongod']
@@ -20,32 +21,32 @@ class MongoDB(SimpleBase):
         ]
 
     def init_after(self):
-        for cluster in self.data.values():
+        for cluster in self.data.get('cluster_map', {}).values():
             if env.host in cluster['hosts']:
-                self.data['mysql_cluster'] = cluster
+                self.data.update(cluster)
                 break
 
     def setup(self):
-        self.init()
-        cluster = self.data['mysql_cluster']
+        data = self.init()
 
         if self.is_tag('package'):
             filer.template(src='mongodb.repo', dest='/etc/yum.repos.d/mongodb.repo')
             self.install_packages('--enablerepo mongodb-org')
 
         if self.is_tag('conf'):
-            is_updated = filer.template('/etc/mongod.conf', data=self.data)
+            if filer.template('/etc/mongod.conf', data=data):
+                self.handlers['restart_mongod'] = True
 
         if self.is_tag('service'):
             self.enable_services().start_services()
-            if is_updated:
-                self.restart_services()
+            self.exec_handlers()
 
         if self.is_tag('data'):
-            for user in cluster['users'].values():
-                roles = '","'.join(user['roles'])
-                run('mongo --eval \''
-                    'db = db.getSiblingDB("{0}");'
-                    'if (db.getUser("{1}") == null) {{'
-                    '    db.createUser({{user: "{1}", pwd: "{2}", roles: ["{3}"]}})'
-                    '}}\''.format(user['db'], user['user'], user['password'], roles))
+            for user in data['user_map'].values():
+                for db in user['dbs']:
+                    roles = '","'.join(user['roles'])
+                    run('mongo --eval \''
+                        'db = db.getSiblingDB("{0}");'
+                        'if (db.getUser("{1}") == null) {{'
+                        '    db.createUser({{user: "{1}", pwd: "{2}", roles: ["{3}"]}})'
+                        '}}\''.format(db, user['user'], user['password'], roles))

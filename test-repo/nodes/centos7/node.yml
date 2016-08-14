@@ -1,0 +1,22 @@
+node_map:
+  cluster1:
+    hosts:
+      - 192.168.122.50
+    fabruns:
+      - test/mongodb
+
+mongodb:
+  cluster_map:
+    cluster1:
+      port: 27017
+      user_map:
+        openstack:
+          dbs: [metering, event]
+          user: openstack
+          password: openstackpass
+          src_hosts:
+          roles:
+            - readWrite
+            - dbAdmin
+
+      hosts: ${#node_map.cluster1.hosts}
